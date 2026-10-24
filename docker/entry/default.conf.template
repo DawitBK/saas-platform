@@ -1,5 +1,7 @@
 # The one door into the platform: routes by path to the services on the Docker network.
 # The tunnel (Tailscale Funnel or similar) points at this container's published port; nothing else is exposed.
+# nginx drops every inherited proxy_set_header in a location that sets one of its own, so each such location below repeats the
+# common set (Host, X-Forwarded-For, X-Real-IP, X-Forwarded-Proto); test/platform.test.mjs checks that none is missed.
 # nginx's image fills ${PUBLIC_HOST} from the environment when the container starts; every $variable below is nginx's own.
 
 # Docker's own DNS, asked again every 10 seconds, so a service that is restarted or recreated is found again
@@ -62,6 +64,10 @@ server {
 
   # GMS API and realtime
   location /socket.io/ {
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $client_ip;
+    proxy_set_header X-Real-IP $client_ip;
+    proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_pass $gms_api;
@@ -75,6 +81,10 @@ server {
   }
   location /dms/socket.io/ {
     rewrite ^/dms/socket.io/(.*)$ /socket.io/$1 break;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $client_ip;
+    proxy_set_header X-Real-IP $client_ip;
+    proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_pass $dms_api;
@@ -85,6 +95,11 @@ server {
   # public address so the sign-in and callback addresses do not depend on which proxy sits in front.
   location ~ ^/sso-backend/(authorize|token|me|jwks|session|\.well-known|bridge|portal|interaction|api/v1|health)(/|$|\?) {
     rewrite ^/sso-backend/(.*)$ /$1 break;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $client_ip;
+    proxy_set_header X-Real-IP $client_ip;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header Connection "";
     proxy_set_header X-Forwarded-Host ${PUBLIC_HOST};
     proxy_pass $sso_api;
   }

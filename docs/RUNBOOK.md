@@ -18,6 +18,16 @@ Everyday operation, what to do when something breaks, and what lives only on thi
 
 The platform restarts by itself after a crash or a reboot (every long-running service has `restart: unless-stopped`) once Docker Desktop is running. Set Docker Desktop to start when you sign in to Windows and keep the machine awake on mains power (`powercfg /change standby-timeout-ac 0`, lid action "do nothing").
 
+## What recovers by itself, and what does not
+
+| Situation | What happens |
+| --- | --- |
+| A service crashes or exits | Docker starts it again within seconds (measured: about 8 s to healthy). |
+| Docker Desktop restarts, or the machine reboots and you sign in | Everything that was running comes back (Docker Desktop starts at sign-in on this machine). |
+| A service hangs without exiting | Not restarted: Docker only marks it unhealthy. `npm run status` shows it; `npm run restart -- <service>` fixes it. |
+| You run `docker stop` or `docker kill` on a container | It stays down on purpose (that is what `unless-stopped` means). `npm run up` starts it again. |
+| The machine sleeps or loses its connection | Nothing is wrong with the platform, but visitors cannot reach it: see the next section. |
+
 ## The visitor sees "demo server is resting"
 
 The portfolio asks a small status function on Vercel whether the platform answers. It says "offline" when the machine is off, asleep or has lost its connection, or when the tunnel is down. Check, in this order:

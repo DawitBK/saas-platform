@@ -40,7 +40,7 @@ After the first `npm run up` there is nothing to start again. Every long-running
 | `npm run doctor` | Read-only check of this machine and checkout, with what to do about each problem. |
 | `npm run smoke:local` | Health of every service through the entry, in seconds. |
 | `npm run smoke` | A real browser signs in at the public portal as the sandbox administrator and opens every app, judging by what the page says. Needs `npx playwright install chromium` once. |
-| `npm run backup` / `restore` | A full backup now (databases, object storage, settings and secrets) and a restore of one database from a dump. |
+| `npm run backup` / `restore` | A full backup now (databases, object storage, the document system's local files, settings and secrets) and a restore of one database from a dump. |
 | `npm run owner:enroll` / `owner:status` / `owner:recover` | The identity provider's owner verification (terminal only). |
 | `npm run licences:demo` | Demo licences for the three systems, for a sandbox like this one. |
 | `npm run test` | Guards: self-contained, no machine paths, compose and routing agree. |
@@ -67,7 +67,7 @@ After the first `npm run up` there is nothing to start again. Every long-running
 
 ## Moving to another machine
 
-Clone this repository, run `npm install`, `npm run setup`, fill in `.env`, then `npm run up`. That gives a working, empty platform. To carry the existing data across, restore the dumps (`npm run restore`), copy `.state/` (secrets, owner key) and the MinIO volume from `npm run backup`, then `npm run up`. The databases are not portable without `.state/secrets.json`: encrypted documents cannot be read without it.
+Clone this repository, run `npm install`, `npm run setup`, fill in `.env`, then `npm run up`. On an empty machine that gives running services with migrated, empty databases: no users, no registered apps. Creating the first accounts and registering the apps with the identity provider is not automated yet (`npm run bootstrap` is not written). The supported way to move a working platform is to carry its data across: copy `.state/` (secrets, owner key) from the old machine, restore the dumps (`npm run restore`) and the `miniodata.tgz` and `dmsstorage.tgz` volumes from `npm run backup`, then `npm run up`. The databases are not portable without `.state/secrets.json`: encrypted documents cannot be read without it.
 
 ## What is not in git, on purpose
 

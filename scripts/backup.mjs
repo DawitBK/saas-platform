@@ -4,8 +4,8 @@
  *
  *   npm run backup
  *
- * Writes .state/backups/<stamp>/ with one custom-format dump per database, miniodata.tgz and a copy of .state (secrets, env files,
- * the owner key). The platform also dumps every database nightly by itself (the `backup` service); this is the full, on-demand one.
+ * Writes .state/backups/<stamp>/ with one custom-format dump per database, miniodata.tgz (object storage), dmsstorage.tgz (the document
+ * system's local files and upload staging) and a copy of .state (secrets, env files, the owner key). The platform also dumps every database nightly by itself (the `backup` service); this is the full, on-demand one.
  * Keep a copy somewhere other than this machine: backups in the same place as the data are not a backup.
  */
 import { spawnSync } from 'node:child_process';
@@ -34,10 +34,18 @@ for (const db of list.stdout.split(/\r?\n/).filter(Boolean)) {
   if (r.status !== 0) process.exit(1);
 }
 
-const tar = spawnSync('docker', ['run', '--rm', '-v', `${project}_miniodata:/data:ro`, '-v', `${dir}:/out`, 'alpine', 'tar', 'czf', '/out/miniodata.tgz', '-C', '/data', '.'], { stdio: 'inherit', windowsHide: true });
-console.log(`${tar.status === 0 ? 'ok  ' : 'FAIL'} object storage (miniodata.tgz)`);
+for (const [volume, file, what] of [['miniodata', 'miniodata.tgz', 'object storage'], ['dmsstorage', 'dmsstorage.tgz', 'document system local files']]) {
+  const tar = spawnSync('docker', ['run', '--rm', '-v', `${project}_${volume}:/data:ro`, '-v', `${dir}:/out`, 'alpine', 'tar', 'czf', `/out/${file}`, '-C', '/data', '.'], { stdio: 'inherit', windowsHide: true });
+  console.log(`${tar.status === 0 ? 'ok  ' : 'FAIL'} ${what} (${file})`);
+}
 
-// Settings and secrets, without the backups folder itself.
-fs.cpSync(STATE, path.join(dir, 'state'), { recursive: true, filter: (src) => !src.startsWith(path.join(STATE, 'backups')) });
+// Settings and secrets, one entry at a time: Node refuses to copy a folder into a folder inside itself, so the backups folder
+// (and the build logs) are left out by name instead of by filter.
+const stateCopy = path.join(dir, 'state');
+fs.mkdirSync(stateCopy, { recursive: true });
+for (const entry of fs.readdirSync(STATE)) {
+  if (entry === 'backups' || entry.endsWith('.log')) continue;
+  fs.cpSync(path.join(STATE, entry), path.join(stateCopy, entry), { recursive: true });
+}
 console.log('ok   settings and secrets (state/)');
 console.log(`\nBackup written to ${dir}\nCopy it off this machine.`);

@@ -70,7 +70,7 @@ const trustFile = path.join(licenceDir, 'trust.json');
 const trust = fs.existsSync(trustFile) ? JSON.stringify(JSON.parse(fs.readFileSync(trustFile, 'utf8'))) : null;
 const signingKey = fs.existsSync(licenceDir) ? fs.readdirSync(licenceDir).find((f) => /^license-private-.*\.pem$/.test(f)) : null;
 const licenceValues = trust ? { LICENSE_TRUST_PUBLIC_KEYS: trust } : {};
-// The product apps registered with the identity provider (written by `npm run bootstrap`).
+// The product apps registered with the identity provider: client id and secret per app, carried over from the previous setup.
 const productFile = path.join(STATE, 'apps-sso.json');
 const productSso = fs.existsSync(productFile) ? JSON.parse(fs.readFileSync(productFile, 'utf8')) : null;
 
@@ -141,7 +141,8 @@ build(
     IDP_ISSUER: `${origin}/sso`,
     IDP_INTERNAL_URL: sso,
     DATABASE_URL: pgUrl(platform.databases.sso),
-    REDIS_URL: valkey,
+    // REDIS_URL is left unset on purpose: the identity provider's own template says so (one process, in-memory rate limiting is
+    // correct), and with it set the process stops at start-up.
     TRUST_PROXY_HOPS: '1',
     COOKIE_KEYS: `${secret('sso.cookie1')},${secret('sso.cookie2')}`,
     TOTP_ENCRYPTION_KEY: secret('sso.totp'),

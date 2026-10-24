@@ -19,7 +19,6 @@
     "doctor": "node scripts/doctor.mjs",
     "smoke": "node scripts/smoke.mjs",
     "smoke:local": "node scripts/smoke.mjs --local",
-    "bootstrap": "node scripts/bootstrap.mjs",
     "backup": "node scripts/backup.mjs",
     "restore": "node scripts/restore.mjs",
     "owner:enroll": "node scripts/tools.mjs owner-enroll",

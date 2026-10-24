@@ -22,11 +22,11 @@ const record = (ok, what, detail = '') => {
 };
 
 if (local) {
+  const origin = s.PUBLIC_ORIGIN.replace(/\/+$/, '');
   const checks = [
     ['entry', '/healthz'],
     ['identity provider', '/sso-backend/health'],
     ['guest system', '/api/v1/health'],
-    ...Object.entries(platform.apps).map(([key]) => [`${key} API`, `/app-api/${key}/api/v1/health`]),
   ];
   for (const [label, p] of checks) {
     try {
@@ -36,9 +36,23 @@ if (local) {
       record(false, label, e.cause?.code ?? e.message);
     }
   }
+  // An app's health route is not public (only /api/v1 is routed), so ask what a sign-in click would ask: the app's sign-in settings.
+  // They are 200 and enabled only when the app can reach the identity provider, and the addresses a browser will follow must be public.
+  for (const key of Object.keys(platform.apps)) {
+    const p = `/app-api/${key}/api/v1/auth/oidc/config`;
+    try {
+      const res = await fetch(`${entry}${p}`, { signal: AbortSignal.timeout(10000) });
+      const body = res.ok ? await res.json() : {};
+      const publicUrl = (u) => typeof u === 'string' && u.startsWith(`${origin}/`);
+      record(res.ok && body.enabled === true && publicUrl(body.authorizationEndpoint) && (!body.endSessionEndpoint || publicUrl(body.endSessionEndpoint)), `${key} sign-in settings`, `${res.status} ${body.authorizationEndpoint ?? ''}`);
+    } catch (e) {
+      record(false, `${key} sign-in settings`, e.cause?.code ?? e.message);
+    }
+  }
   try {
     const doc = await (await fetch(`${entry}/sso-backend/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10000) })).json();
-    record(doc.issuer === `${s.PUBLIC_ORIGIN.replace(/\/+$/, '')}/sso`, 'sign-in document issuer', doc.issuer);
+    record(doc.issuer === `${origin}/sso`, 'sign-in document issuer', doc.issuer);
+    record(String(doc.authorization_endpoint).startsWith(`${origin}/sso/`), 'sign-in document addresses are public https', doc.authorization_endpoint);
   } catch (e) {
     record(false, 'sign-in document', e.message);
   }

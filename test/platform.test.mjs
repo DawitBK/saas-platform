@@ -82,3 +82,31 @@ test('every long-running service restarts by itself', { skip: cfg ? false : 'doc
     assert.equal(svc.restart, 'unless-stopped', `${name} has no restart policy`);
   }
 });
+
+test('fixed addresses lie outside the range other containers are given addresses from', { skip: cfg ? false : 'docker is not available' }, () => {
+  const ipam = cfg.networks.default.ipam.config[0];
+  assert.ok(ipam.ip_range, 'the network has no ip_range: a container without a fixed address can take one that is reserved');
+  const start = Number(ipam.ip_range.split('/')[0].split('.')[3]);
+  const bits = Number(ipam.ip_range.split('/')[1]);
+  const end = start + 2 ** (32 - bits) - 1;
+  for (const [name, svc] of Object.entries(cfg.services)) {
+    const ip = svc.networks?.default?.ipv4_address;
+    if (!ip) continue;
+    const last = Number(ip.split('.')[3]);
+    assert.ok(last < start || last > end, `${name} (${ip}) is inside the dynamic range ${ipam.ip_range}`);
+  }
+});
+
+test('a location that sets its own proxy headers repeats the common ones (nginx drops the inherited set otherwise)', () => {
+  const conf = fs.readFileSync(path.join(ROOT, 'docker', 'entry', 'default.conf.template'), 'utf8');
+  const blocks = conf.split(/\n\s*location\s/).slice(1);
+  const need = ['Host', 'X-Forwarded-For', 'X-Real-IP', 'X-Forwarded-Proto'];
+  const bad = [];
+  for (const block of blocks) {
+    const head = block.split('{')[0].trim();
+    const body = block.slice(block.indexOf('{'), block.indexOf('\n  }'));
+    if (!/proxy_set_header/.test(body)) continue;
+    for (const h of need) if (!new RegExp(`proxy_set_header\\s+${h}\\s`).test(body)) bad.push(`location ${head} lacks ${h}`);
+  }
+  assert.deepEqual(bad, []);
+});
