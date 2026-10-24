@@ -41,9 +41,27 @@ function vercel(args, { cwd, input, quiet } = {}) {
   return spawnSync('vercel', args, { cwd, input, shell: win, encoding: 'utf8', stdio: quiet ? 'pipe' : input ? ['pipe', 'inherit', 'inherit'] : 'inherit', windowsHide: true });
 }
 
+/**
+ * The Vercel tool adds `.vercel` to the .gitignore of whatever folder it links, which leaves a cloned repository with an edit it never
+ * made. Keep `.vercel` out of git through the clone's own local exclude file instead, and put .gitignore back if that was the only change.
+ */
+function keepClean(cwd) {
+  if (dry || !fs.existsSync(path.join(cwd, '.git'))) return;
+  const exclude = path.join(cwd, '.git', 'info', 'exclude');
+  fs.mkdirSync(path.dirname(exclude), { recursive: true });
+  const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
+  if (!/^\.vercel\/?$/m.test(text)) fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.vercel\n`);
+  const diff = spawnSync('git', ['diff', '--no-color', '-U0', '--', '.gitignore'], { cwd, encoding: 'utf8', windowsHide: true }).stdout ?? '';
+  const changed = diff.split(/\r?\n/).filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+  // Only additions, and only blank lines plus the .vercel line itself: anything else is somebody's real edit and stays.
+  const onlyVercel = changed.every((l) => /^\+\s*(\.vercel)?\s*$/.test(l)) && changed.some((l) => /\.vercel/.test(l));
+  if (onlyVercel) spawnSync('git', ['checkout', '--', '.gitignore'], { cwd, windowsHide: true });
+}
+
 function link(cwd, project) {
   if (!dry && fs.existsSync(path.join(cwd, '.vercel', 'project.json'))) return;
   const r = vercel(['link', '--yes', '--project', project, ...scope], { cwd });
+  keepClean(cwd);
   if (r.status !== 0) {
     console.error(`Could not link ${path.relative(ROOT, cwd) || '.'} to the Vercel project "${project}". Does it exist, and are you signed in (vercel login)?`);
     process.exit(1);
@@ -68,6 +86,7 @@ function deploy(cwd) {
   if (!dry) fs.writeFileSync(ignoreFile, `${previous}\n.env\n.env.*\n**/.env\n**/.env.*\nnode_modules\n**/node_modules\n.next\n**/.next\n.turbo\n**/.turbo\ndist\n**/dist\n.git\nlogs\n.state\n`);
   try {
     const r = vercel(['deploy', '--prod', '--yes', ...scope], { cwd });
+    keepClean(cwd);
     if (r.status !== 0) {
       console.error('vercel deploy failed.');
       process.exit(r.status ?? 1);
