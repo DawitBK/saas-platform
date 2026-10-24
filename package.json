@@ -1,0 +1,39 @@
+{
+  "name": "saas-platform",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs the SaaS demo platform (identity provider, document system, guest system and four product apps) on one machine with Docker Compose.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "configure": "node scripts/configure.mjs",
+    "up": "node scripts/up.mjs",
+    "down": "node scripts/compose.mjs down",
+    "restart": "node scripts/compose.mjs restart",
+    "logs": "node scripts/compose.mjs logs -f --tail=100",
+    "compose": "node scripts/compose.mjs",
+    "status": "node scripts/status.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:local": "node scripts/smoke.mjs --local",
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "owner:enroll": "node scripts/tools.mjs owner-enroll",
+    "owner:status": "node scripts/tools.mjs owner-status",
+    "owner:recover": "node scripts/tools.mjs owner-recover",
+    "licences:demo": "node scripts/tools.mjs licences-demo",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "seed:visitor": "node scripts/seed-visitor.mjs",
+    "deploy:vercel": "node scripts/deploy-vercel.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}

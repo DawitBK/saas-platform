@@ -1,0 +1,21 @@
+# Machine settings, generated secrets, logs and backups: never in git.
+/.env
+/.env.*
+!/.env.example
+/.state/
+/.state-*/
+node_modules/
+
+# The editions and the product apps are their own repositories, cloned here by `npm run setup`.
+/sso-saas/
+/dms-saas/
+/gms-saas/
+/apps/*/
+/*.old-history/
+
+# Editor and OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log

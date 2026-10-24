@@ -1,0 +1,423 @@
+# The whole platform on one machine: data plane (PostgreSQL 18, Valkey, MinIO), the identity provider, the document and guest
+# systems, the four product apps' APIs, the nginx entry and a nightly database backup.
+#
+#   npm run up        builds the images, runs the migrations, starts everything, waits until it is healthy
+#   npm run status    what is running and whether it answers
+#
+# Always use the npm scripts (or `npm run compose -- <args>`): they pass .env and the generated .state/infra.env, which this file
+# needs for its published ports and passwords. Nothing here holds a secret; every service reads its own generated file in
+# ${STATE_DIR:-./.state}/env/. Only the nginx entry and the data-plane tool ports are published, and only on 127.0.0.1.
+name: saas-hosting
+
+x-service: &service
+  restart: unless-stopped
+  init: true
+  environment:
+    TZ: ${TZ:-UTC}
+  extra_hosts:
+    - 'host.docker.internal:host-gateway'
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+
+x-node-health: &node-health
+  interval: 15s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+services:
+  # ---------------------------------------------------------------------------------------------- data plane
+  postgres:
+    <<: *service
+    image: postgres:18
+    environment:
+      TZ: ${TZ:-UTC}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run npm run configure first}
+      EDAMS_APP_DB_PASSWORD: ${EDAMS_APP_DB_PASSWORD:?run npm run configure first}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5440}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - password_encryption=scram-sha-256
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  valkey:
+    <<: *service
+    image: valkey/valkey:8-alpine
+    command: ['valkey-server', '--requirepass', '${VALKEY_PASSWORD:?run npm run configure first}', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:${VALKEY_PORT:-6390}:6379'
+    volumes:
+      - valkeydata:/data
+    environment:
+      TZ: ${TZ:-UTC}
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+    healthcheck:
+      test: ['CMD-SHELL', 'valkey-cli -a "$$VALKEY_PASSWORD" ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    <<: *service
+    image: cgr.dev/chainguard/minio:latest
+    command: ['server', '/data', '--console-address', ':9091']
+    environment:
+      TZ: ${TZ:-UTC}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-saasminio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run npm run configure first}
+    ports:
+      - '127.0.0.1:${MINIO_PORT:-9090}:9000'
+      - '127.0.0.1:${MINIO_CONSOLE_PORT:-9091}:9091'
+    volumes:
+      - miniodata:/data
+
+  backup:
+    <<: *service
+    image: postgres:18
+    entrypoint: ['sh', '-c']
+    command:
+      - |
+        # A dump of every database a minute after start, then every 24 hours; dumps older than BACKUP_KEEP days are removed.
+        sleep 60
+        while true; do
+          stamp=$$(date -u +%Y%m%d-%H%M%S)
+          for db in $$(psql -h postgres -U postgres -Atc "select datname from pg_database where not datistemplate and datname <> 'postgres'"); do
+            pg_dump -h postgres -U postgres -Fc "$$db" > "/backups/$$stamp-$$db.dump" || echo "backup of $$db failed"
+          done
+          find /backups -name '*.dump' -mtime +$${BACKUP_KEEP:-7} -delete
+          echo "backup $$stamp done"
+          sleep 86400
+        done
+    environment:
+      TZ: ${TZ:-UTC}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+    volumes:
+      - ${STATE_DIR:-./.state}/backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------------------------- identity provider
+  migrate-sso:
+    image: saas/sso:local
+    pull_policy: never
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/sso.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sso:
+    <<: *service
+    build:
+      context: ./sso-saas
+      dockerfile: backend/Dockerfile
+    image: saas/sso:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/sso.env
+    volumes:
+      - ${STATE_DIR:-./.state}/owner:/state/owner
+      - ${STATE_DIR:-./.state}/licence:/state/licence:ro
+      - ./scripts/container:/platform:ro
+    expose: ['7300', '4200']
+    networks:
+      default:
+        ipv4_address: ${PLATFORM_SUBNET:-172.29.181}.10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      migrate-sso:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:7300/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  # Operator tools (owner enrolment, licence tools): run on demand with `npm run owner:enroll` and the like, never started by `up`.
+  sso-tools:
+    profiles: [tools]
+    build:
+      context: ./sso-saas
+      dockerfile: ../docker/sso-tools.Dockerfile
+    image: saas/sso-tools:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/sso.env
+    volumes:
+      - ${STATE_DIR:-./.state}/owner:/state/owner
+      - ${STATE_DIR:-./.state}/licence:/state/licence
+      - ./scripts/container:/platform:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------------------------- guest system
+  migrate-gms:
+    image: saas/gms:local
+    pull_policy: never
+    command: ['node', 'scripts/run-sequelize-cli.js', 'production', 'db:migrate']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/gms.env
+    volumes:
+      - ${STATE_DIR:-./.state}/env/gms.env:/app/.env.production:ro
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gms:
+    <<: *service
+    build:
+      context: ./gms-saas/backend
+      dockerfile: Dockerfile
+      additional_contexts:
+        vendor: ./gms-saas/vendor
+    image: saas/gms:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/gms.env
+    volumes:
+      - ${STATE_DIR:-./.state}/env/gms.env:/app/.env.production:ro
+    expose: ['7200']
+    networks:
+      default:
+        ipv4_address: ${PLATFORM_SUBNET:-172.29.181}.20
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      migrate-gms:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:7200/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  # ---------------------------------------------------------------------------------------------- document system
+  migrate-dms:
+    image: saas/dms:local
+    pull_policy: never
+    command: ['node', 'dist/scripts/migrate.js', 'up']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/dms-migrate.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dms:
+    <<: *service
+    build:
+      context: ./dms-saas
+      dockerfile: backend/Dockerfile
+    image: saas/dms:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/dms.env
+    environment:
+      TZ: ${TZ:-UTC}
+      ENABLE_QUEUE_WORKERS: 'false'
+      ENABLE_OUTBOX_POLLING: 'false'
+    expose: ['7100']
+    networks:
+      default:
+        ipv4_address: ${PLATFORM_SUBNET:-172.29.181}.30
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      migrate-dms:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:7100/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  dms-worker:
+    <<: *service
+    image: saas/dms:local
+    pull_policy: never
+    command: ['node', 'dist/src/bin/worker.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/dms.env
+    environment:
+      TZ: ${TZ:-UTC}
+      ENABLE_QUEUE_WORKERS: 'true'
+      ENABLE_OUTBOX_POLLING: 'true'
+    depends_on:
+      dms:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------------------------- product apps (APIs; their web parts run on Vercel)
+  migrate-retail:
+    image: saas/retail:local
+    pull_policy: never
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/retail-os.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  retail:
+    <<: *service
+    build:
+      context: ./apps/retail-os
+      dockerfile: Dockerfile
+    image: saas/retail:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/retail-os.env
+    volumes:
+      - ./scripts/container:/platform:ro
+    expose: ['16101']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-retail:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:16101/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  migrate-library:
+    image: saas/library:local
+    pull_policy: never
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/library.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  library:
+    <<: *service
+    build:
+      context: ./apps/library-management-system
+      dockerfile: Dockerfile
+    image: saas/library:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/library.env
+    volumes:
+      - ./scripts/container:/platform:ro
+    expose: ['16102']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-library:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:16102/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  migrate-martronics:
+    image: saas/martronics:local
+    pull_policy: never
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/martronics.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  martronics:
+    <<: *service
+    build:
+      context: ./apps/martronics
+      dockerfile: Dockerfile
+    image: saas/martronics:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/martronics.env
+    volumes:
+      - ./scripts/container:/platform:ro
+    expose: ['16103']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-martronics:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:16103/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  migrate-jobpilot:
+    image: saas/jobpilot:local
+    pull_policy: never
+    command: ['node', 'dist/db/migrate.js']
+    env_file:
+      - ${STATE_DIR:-./.state}/env/jobpilot.env
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  jobpilot:
+    <<: *service
+    build:
+      context: ./apps/jobpilot
+      dockerfile: Dockerfile
+    image: saas/jobpilot:local
+    env_file:
+      - ${STATE_DIR:-./.state}/env/jobpilot.env
+    volumes:
+      - ./scripts/container:/platform:ro
+    expose: ['16104']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate-jobpilot:
+        condition: service_completed_successfully
+    healthcheck:
+      <<: *node-health
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:16104/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
+  # ---------------------------------------------------------------------------------------------- the door
+  entry:
+    <<: *service
+    image: nginx:1.28-alpine
+    environment:
+      TZ: ${TZ:-UTC}
+      PUBLIC_HOST: ${PUBLIC_HOST:?run npm run configure first}
+    ports:
+      - '127.0.0.1:${ENTRY_PORT:-15080}:80'
+    volumes:
+      - ./docker/entry/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz | grep -q ok']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${PLATFORM_SUBNET:-172.29.181}.0/24
+
+volumes:
+  pgdata:
+  valkeydata:
+  miniodata:

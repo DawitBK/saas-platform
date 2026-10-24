@@ -1,0 +1,111 @@
+# The one door into the platform: routes by path to the services on the Docker network.
+# The tunnel (Tailscale Funnel or similar) points at this container's published port; nothing else is exposed.
+# nginx's image fills ${PUBLIC_HOST} from the environment when the container starts; every $variable below is nginx's own.
+
+# Docker's own DNS, asked again every 10 seconds, so a service that is restarted or recreated is found again
+# without reloading nginx (each upstream below is a variable for that reason).
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+# The address the backends rate-limit by. Behind Vercel's rewrites the visitor's address arrives in X-Forwarded-For; through a
+# bare tunnel it is Cloudflare's CF-Connecting-IP; otherwise the peer. A loopback or private address in X-Forwarded-For is
+# ignored: a visitor must not be able to pose as this machine (the backends' internal endpoints allow loopback only).
+map $http_x_forwarded_for $xff_first { default ""; "~^\s*(?<first>[^,\s]+)" $first; }
+map $xff_first $xff_public {
+  default "";
+  "~^(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|[0-9a-fA-F:]+)$" $xff_first;
+}
+map $xff_public $xff_usable {
+  default $xff_public;
+  "~^(?:127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.|169\.254\.|0\.|::1$|[fF][cdCD][0-9a-fA-F]{2}:|[fF][eE]80:)" "";
+}
+map "$xff_usable|$http_cf_connecting_ip" $client_ip {
+  "~^(?<a>[^|]+)\|"   $a;
+  "~^\|(?<b>.+)$"     $b;
+  default             $remote_addr;
+}
+
+server {
+  listen 80;
+  server_name _;
+  server_tokens off;
+  client_max_body_size 0;
+
+  set $sso_api     http://sso:7300;
+  set $sso_gateway http://sso:4200;
+  set $gms_api     http://gms:7200;
+  set $dms_api     http://dms:7100;
+  set $retail_api     http://retail:16101;
+  set $library_api    http://library:16102;
+  set $martronics_api http://martronics:16103;
+  set $jobpilot_api   http://jobpilot:16104;
+
+  proxy_http_version 1.1;
+  proxy_set_header Host $host;
+  proxy_set_header X-Forwarded-For $client_ip;
+  proxy_set_header X-Real-IP $client_ip;
+  proxy_set_header X-Forwarded-Proto https;
+  proxy_set_header Connection "";
+  proxy_read_timeout 300s;
+  proxy_send_timeout 300s;
+  proxy_request_buffering off;
+  proxy_buffering off;
+
+  location = /healthz { default_type text/plain; return 200 "ok\n"; }
+
+  # GMS "sign in with SSO" hand-off (the one gateway route that is reachable)
+  location /gms/__sso {
+    rewrite ^/gms/__sso(.*)$ /__sso$1 break;
+    proxy_pass $sso_gateway;
+  }
+
+  # GMS API and realtime
+  location /socket.io/ {
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_pass $gms_api;
+  }
+  location /api/ { proxy_pass $gms_api; }
+
+  # DMS API and realtime: the proxy strips /dms, the app never sees it
+  location /dms/api/v1/ {
+    rewrite ^/dms/api/v1/(.*)$ /api/v1/$1 break;
+    proxy_pass $dms_api;
+  }
+  location /dms/socket.io/ {
+    rewrite ^/dms/socket.io/(.*)$ /socket.io/$1 break;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_pass $dms_api;
+  }
+
+  # The identity provider's own API, for the SSO frontend running somewhere else (Vercel). Only what the frontend itself
+  # forwards: the internal, metrics and documentation routes stay on the Docker network. The forwarded host is pinned to the
+  # public address so the sign-in and callback addresses do not depend on which proxy sits in front.
+  location ~ ^/sso-backend/(authorize|token|me|jwks|session|\.well-known|bridge|portal|interaction|api/v1|health)(/|$|\?) {
+    rewrite ^/sso-backend/(.*)$ /$1 break;
+    proxy_set_header X-Forwarded-Host ${PUBLIC_HOST};
+    proxy_pass $sso_api;
+  }
+  location /sso-backend/ { return 404; }
+
+  # The product apps' APIs: only their /api/v1 routes are reachable.
+  location ~ ^/app-api/retail-os/api/v1/ {
+    rewrite ^/app-api/retail-os/(.*)$ /$1 break;
+    proxy_pass $retail_api;
+  }
+  location ~ ^/app-api/library/api/v1/ {
+    rewrite ^/app-api/library/(.*)$ /$1 break;
+    proxy_pass $library_api;
+  }
+  location ~ ^/app-api/martronics/api/v1/ {
+    rewrite ^/app-api/martronics/(.*)$ /$1 break;
+    proxy_pass $martronics_api;
+  }
+  location ~ ^/app-api/jobpilot/api/v1/ {
+    rewrite ^/app-api/jobpilot/(.*)$ /$1 break;
+    proxy_pass $jobpilot_api;
+  }
+  location /app-api/ { return 404; }
+}

@@ -1,0 +1,87 @@
+{
+  "_note": "The one place that says what the platform is made of: which repositories, which internal ports, which databases. Machine-specific values (addresses, host ports) are in .env, never here. test/topology.test.mjs checks this file against compose.yml.",
+  "editions": [
+    { "name": "sso-saas", "repo": "https://github.com/DawitBK/sso-saas", "ref": "main" },
+    { "name": "dms-saas", "repo": "https://github.com/DawitBK/dms-saas", "ref": "main" },
+    { "name": "gms-saas", "repo": "https://github.com/DawitBK/gms-saas", "ref": "main" }
+  ],
+  "ports": { "sso": 7300, "gateway": 4200, "dms": 7100, "gms": 7200, "postgres": 5432, "valkey": 6379, "minio": 9000 },
+  "databases": { "sso": "sso_saas", "dms": "dms_saas", "gms": "gms_saas" },
+  "apps": {
+    "retail-os": {
+      "service": "retail",
+      "repo": "https://github.com/DawitBK/retail-os",
+      "ref": "main",
+      "dir": "apps/retail-os",
+      "port": 16101,
+      "db": "retail_os",
+      "label": "Retail OS",
+      "tile": "Retail OS: till, stock and books",
+      "twoRoles": false,
+      "bootstrap": { "script": "owner:bootstrap", "email": "OWNER_EMAIL", "password": "OWNER_PASSWORD" },
+      "extraEnv": { "BUSINESS_TIMEZONE": "Africa/Addis_Ababa" },
+      "owner": "owner",
+      "people": [
+        ["shop.manager", "Mia", "Manager", "manager"],
+        ["shop.accountant", "Abel", "Books", "accountant"],
+        ["shop.cashier", "Cleo", "Till", "cashier"]
+      ]
+    },
+    "library": {
+      "service": "library",
+      "repo": "https://github.com/DawitBK/library-management-system",
+      "ref": "next",
+      "dir": "apps/library-management-system",
+      "port": 16102,
+      "db": "library",
+      "label": "Library",
+      "tile": "Library: catalogue and circulation desk",
+      "twoRoles": false,
+      "bootstrap": { "script": "admin:bootstrap", "email": "ADMIN_EMAIL", "password": "ADMIN_PASSWORD" },
+      "extraEnv": {},
+      "owner": "admin",
+      "people": [
+        ["librarian.lia", "Lia", "Librarian", "librarian"],
+        ["librarian.sol", "Sol", "Librarian", "librarian"]
+      ]
+    },
+    "martronics": {
+      "service": "martronics",
+      "repo": "https://github.com/DawitBK/martronics",
+      "ref": "next",
+      "dir": "apps/martronics",
+      "port": 16103,
+      "db": "martronics",
+      "label": "Martronics",
+      "tile": "Martronics: online shop and admin",
+      "twoRoles": false,
+      "bootstrap": { "script": "admin:bootstrap", "email": "ADMIN_EMAIL", "password": "ADMIN_PASSWORD" },
+      "extraEnv": {},
+      "owner": "admin",
+      "people": [
+        ["shop.manager", "Mara", "Manager", "manager"],
+        ["customer.dina", "Dina", "Buyer", "customer"],
+        ["customer.eli", "Eli", "Buyer", "customer"]
+      ]
+    },
+    "jobpilot": {
+      "service": "jobpilot",
+      "repo": "https://github.com/DawitBK/jobpilot",
+      "ref": "main",
+      "dir": "apps/jobpilot",
+      "port": 16104,
+      "db": "jobpilot",
+      "label": "JobPilot",
+      "tile": "JobPilot: job search workspace",
+      "twoRoles": true,
+      "bootstrap": null,
+      "extraEnv": {},
+      "owner": null,
+      "people": [
+        ["jobseeker.ana", "Ana", "Candidate"],
+        ["jobseeker.ben", "Ben", "Candidate"],
+        ["recruiter.rita", "Rita", "Recruiter"]
+      ]
+    }
+  }
+}
