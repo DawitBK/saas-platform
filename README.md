@@ -27,6 +27,8 @@ npm run status       # what runs and whether it answers
 
 After the first `npm run up` there is nothing to start again. Every long-running service has `restart: unless-stopped`, so a crash, a Docker restart or a reboot brings it back by itself as long as Docker Desktop starts when you sign in to Windows. Point your tunnel at the entry: `tailscale funnel --bg 15080` (the value of `ENTRY_PORT`).
 
+There are two ways to start it and they work together. By hand, `npm run up`. Or under pm2 (`npm run pm2:start`, and `npm run pm2:boot` once to do it at every sign-in): pm2 runs `up` for you, waiting for Docker Desktop if it is still starting, and keeps a watchdog running that covers what Docker's own restart does not (a container frozen and reported unhealthy several checks in a row, paused, stopped by mistake, or missing). If a service keeps failing the watchdog stops retrying after three fixes in 30 minutes and says so in `npm run pm2:status` instead of looping. pm2 is a dependency of this repository and keeps its files in `.state/pm2`; nothing is installed globally.
+
 ## Commands
 
 | Command | What it does |
@@ -34,7 +36,9 @@ After the first `npm run up` there is nothing to start again. Every long-running
 | `npm run setup` | Clones the three systems and the four apps (branches in `platform.json`) and creates `.env`. Safe to repeat. |
 | `npm run configure` | Writes `.state/` from `.env`: data-plane passwords, every secret (generated once, then kept), one env file per service. `up` runs it first. |
 | `npm run up` | Configure, build the images, run each system's migration, start everything, wait for health. |
-| `npm run down` / `restart` / `logs` | Stop, restart or follow the logs of the whole platform. `npm run restart -- sso` restarts one service. |
+| `npm run down` / `restart` / `logs` | Stop, restart or follow the logs of the whole platform. `npm run restart -- sso` restarts one service. `down` also tells the watchdog (below) that the stop is on purpose; `up` clears that. |
+| `npm run pm2:start` / `pm2:stop` / `pm2:status` / `pm2:logs` | Supervision by pm2: starts the platform (waiting for Docker Desktop) and a watchdog that fixes a frozen, paused, stopped or missing container. The applications still run in Docker. `pm2:status` also shows what the watchdog last saw and did. |
+| `npm run pm2:boot` / `pm2:unboot` | Windows: start all of that at every sign-in (a scheduled task of your own, no administrator rights), in addition to starting it by hand. |
 | `npm run compose -- <args>` | Any `docker compose` command for this project with the settings attached (`-- ps`, `-- exec postgres psql -U postgres`). |
 | `npm run status` | Containers, health, and the sign-in document's issuer. Exit code 1 if anything is wrong. |
 | `npm run doctor` | Read-only check of this machine and checkout, with what to do about each problem. |

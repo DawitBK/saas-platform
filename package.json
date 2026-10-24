@@ -11,7 +11,7 @@
     "setup": "node scripts/setup.mjs",
     "configure": "node scripts/configure.mjs",
     "up": "node scripts/up.mjs",
-    "down": "node scripts/compose.mjs down",
+    "down": "node scripts/down.mjs",
     "restart": "node scripts/compose.mjs restart",
     "logs": "node scripts/compose.mjs logs -f --tail=100",
     "compose": "node scripts/compose.mjs",
@@ -29,10 +29,17 @@
     "test": "node --test \"test/**/*.test.mjs\"",
     "seed:visitor": "node scripts/seed-visitor.mjs",
     "roles:backfill": "node scripts/backfill-app-roles.mjs",
-    "deploy:vercel": "node scripts/deploy-vercel.mjs"
+    "deploy:vercel": "node scripts/deploy-vercel.mjs",
+    "pm2:start": "node scripts/pm2.mjs start",
+    "pm2:stop": "node scripts/pm2.mjs stop",
+    "pm2:status": "node scripts/pm2.mjs status",
+    "pm2:logs": "node scripts/pm2.mjs logs",
+    "pm2:boot": "node scripts/pm2.mjs boot",
+    "pm2:unboot": "node scripts/pm2.mjs unboot"
   },
   "dependencies": {
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "pm2": "^7.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"

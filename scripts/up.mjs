@@ -12,10 +12,22 @@
  * is nothing to start again: not after a crash, not after a reboot (as long as Docker Desktop starts when you sign in).
  */
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, composeOrExit, mustHaveDocker } from './lib/platform.mjs';
+import { ROOT, STATE, composeOrExit, dockerReady, mustHaveDocker } from './lib/platform.mjs';
+import { STOPPED_FILE, UP_LOCK } from './lib/supervise.mjs';
 
+// Started at sign-in by pm2 (--wait-docker): Docker Desktop may still be starting, so wait for it (up to 10 minutes).
+if (process.argv.includes('--wait-docker')) {
+  for (let i = 0; i < 60 && !dockerReady(); i += 1) await new Promise((resolve) => setTimeout(resolve, 10000));
+}
 mustHaveDocker();
+// Starting is the opposite of "stopped on purpose" (`npm run down`), and while it runs the watchdog must not race it.
+fs.mkdirSync(STATE, { recursive: true });
+fs.rmSync(STOPPED_FILE, { force: true });
+fs.writeFileSync(UP_LOCK, `${process.pid} ${new Date().toISOString()}\n`);
+process.on('exit', () => fs.rmSync(UP_LOCK, { force: true }));
+process.on('SIGINT', () => process.exit(130));
 const run = (script) => {
   const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', script)], { stdio: 'inherit', cwd: ROOT, windowsHide: true });
   if (r.status !== 0) process.exit(r.status ?? 1);

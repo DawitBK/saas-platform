@@ -24,8 +24,10 @@ The platform restarts by itself after a crash or a reboot (every long-running se
 | --- | --- |
 | A service crashes or exits | Docker starts it again within seconds (measured: about 8 s to healthy). |
 | Docker Desktop restarts, or the machine reboots and you sign in | Everything that was running comes back (Docker Desktop starts at sign-in on this machine). |
-| A service hangs without exiting | Not restarted: Docker only marks it unhealthy. `npm run status` shows it; `npm run restart -- <service>` fixes it. |
-| You run `docker stop` or `docker kill` on a container | It stays down on purpose (that is what `unless-stopped` means). `npm run up` starts it again. |
+| A service hangs without exiting | Without pm2 it is not restarted: Docker only marks it unhealthy (`npm run status` shows it; `npm run restart -- <service>` fixes it). With pm2 running (`npm run pm2:status` says "watchdog: ok"), the watchdog restarts it after three unhealthy checks in a row (about a minute). |
+| You run `docker stop` or `docker kill` on a container | Without pm2 it stays down on purpose (that is what `unless-stopped` means; `npm run up` starts it again). With pm2 running the watchdog starts it again within about a minute: to keep the platform off, use `npm run down`, which tells the watchdog it is on purpose. |
+| A service keeps failing | The watchdog gives up after three fixes in 30 minutes and shows an ALERT in `npm run pm2:status`; read `npm run logs`. |
+| You sign in to Windows after a restart | If `npm run pm2:boot` was run once, a scheduled task (SaaS-Platform-PM2) starts the platform and the watchdog 90 seconds later. |
 | The machine sleeps or loses its connection | Nothing is wrong with the platform, but visitors cannot reach it: see the next section. |
 
 ## The visitor sees "demo server is resting"
