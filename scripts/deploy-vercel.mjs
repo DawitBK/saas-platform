@@ -46,16 +46,18 @@ function vercel(args, { cwd, input, quiet } = {}) {
  * made. Keep `.vercel` out of git through the clone's own local exclude file instead, and put .gitignore back if that was the only change.
  */
 function keepClean(cwd) {
-  if (dry || !fs.existsSync(path.join(cwd, '.git'))) return;
-  const exclude = path.join(cwd, '.git', 'info', 'exclude');
+  if (dry) return;
+  // The folder may be a repository of its own (an app) or a folder inside one (the identity provider's front end): ask git, not the disk.
+  const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
+  if (git('rev-parse', '--is-inside-work-tree').stdout?.trim() !== 'true') return;
+  const exclude = path.resolve(cwd, git('rev-parse', '--git-path', 'info/exclude').stdout.trim());
   fs.mkdirSync(path.dirname(exclude), { recursive: true });
   const text = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
   if (!/^\.vercel\/?$/m.test(text)) fs.appendFileSync(exclude, `${text && !text.endsWith('\n') ? '\n' : ''}.vercel\n`);
-  const diff = spawnSync('git', ['diff', '--no-color', '-U0', '--', '.gitignore'], { cwd, encoding: 'utf8', windowsHide: true }).stdout ?? '';
-  const changed = diff.split(/\r?\n/).filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+  const changed = (git('diff', '--no-color', '-U0', '--', '.gitignore').stdout ?? '').split(/\r?\n/).filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
   // Only additions, and only blank lines plus the .vercel line itself: anything else is somebody's real edit and stays.
   const onlyVercel = changed.every((l) => /^\+\s*(\.vercel)?\s*$/.test(l)) && changed.some((l) => /\.vercel/.test(l));
-  if (onlyVercel) spawnSync('git', ['checkout', '--', '.gitignore'], { cwd, windowsHide: true });
+  if (onlyVercel) git('checkout', '--', '.gitignore');
 }
 
 function link(cwd, project) {

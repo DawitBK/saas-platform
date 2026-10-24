@@ -45,8 +45,22 @@ try {
   for (const [client, role] of [['edams', 'SYSTEM_ADMIN'], ['gms', 'super_admin']]) {
     await db.query(`insert into idp_client_user_roles (email, client_id, role_name, granted_by) values ($1, $2, $3, 'seed-visitor') on conflict do nothing`, [email, client, role]);
   }
+  // The applications managed from the console (their roles are in the catalog): APP_GRANTS = { "<client id>": ["role", ...] }. A role that is
+  // not in the catalog is skipped and said so, never invented.
+  const granted = [];
+  for (const [client, roles] of Object.entries(JSON.parse(process.env.APP_GRANTS || '{}'))) {
+    for (const role of roles) {
+      const known = await db.query('select 1 from idp_client_roles where client_id = $1 and role_name = $2', [client, role]);
+      if (known.rowCount === 0) {
+        console.warn(`identity provider : skipped ${client}/${role}: not in the role catalog`);
+        continue;
+      }
+      await db.query(`insert into idp_client_user_roles (email, client_id, role_name, granted_by) values ($1, $2, $3, 'seed-visitor') on conflict do nothing`, [email, client, role]);
+      granted.push(`${client} ${role}`);
+    }
+  }
   await db.query('commit');
-  console.log(`identity provider : ${email} ready (administrators' group, DMS SYSTEM_ADMIN, GMS super_admin)`);
+  console.log(`identity provider : ${email} ready (administrators' group, DMS SYSTEM_ADMIN, GMS super_admin${granted.length ? `, ${granted.join(', ')}` : ''})`);
 } catch (e) {
   await db.query('rollback').catch(() => {});
   console.error(e.message);

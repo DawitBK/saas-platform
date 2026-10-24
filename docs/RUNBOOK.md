@@ -36,8 +36,17 @@ The portfolio asks a small status function on Vercel whether the platform answer
 2. `tailscale funnel status`: does it point at `127.0.0.1:<ENTRY_PORT>`? If not: `tailscale funnel --bg 15080`.
 3. Is the machine on a stable connection? A phone hotspot drops several times an hour and Tailscale then relays through Europe: expect failures. Use a cable or a router.
 4. `npm run smoke:local` proves the platform itself; `npm run smoke` proves the public path.
+5. Read what the status function itself says: `https://<portfolio address>/api/demo-status` carries `checks`, what each of its two checks (the identity service's health and an app's sign-in settings) saw.
 
-Note that this machine reaches its own public address over the local network, so a check run on this machine can pass while the internet cannot reach you. The portfolio's status function and `npm run smoke` test from outside.
+| `checks` says | Meaning | Do |
+| --- | --- | --- |
+| `timeout` | Vercel cannot reach the machine at all. | Is it on, awake and online? Step 3. |
+| `ECONNRESET` (or `unreachable`), both checks, while `npm run status` is fine | The tunnel answers and closes the connection: its link to this machine is stale. This happens after the Wi-Fi changes address (a hotspot reconnecting). | `tailscale down`, then `tailscale up`. It recovers within a minute (measured 2026-10-24: offline for 5 minutes, back at once). |
+| `502` | The tunnel is up but nothing answers behind it. | `tailscale funnel status` (step 2), then `npm run status`. |
+| `health` 200, `signIn` 503 | The identity service answers but an app cannot reach it. | `npm run logs -- sso`, then `npm run restart -- sso`. |
+| `signIn` 200 but `online` is false | The app's sign-in settings say single sign-on is off. | Check the app's OIDC settings in `.state/env/<app>.env`. |
+
+Note that this machine reaches its own public address over the local network, so a check run on this machine can pass while the internet cannot reach you (this is exactly what the table's second row looks like from here). The portfolio's status function and `npm run smoke` test from outside.
 
 ## Sign-in says "not licensed" (403 LICENSE_REQUIRED)
 

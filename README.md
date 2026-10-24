@@ -43,7 +43,18 @@ After the first `npm run up` there is nothing to start again. Every long-running
 | `npm run backup` / `restore` | A full backup now (databases, object storage, the document system's local files, settings and secrets) and a restore of one database from a dump. |
 | `npm run owner:enroll` / `owner:status` / `owner:recover` | The identity provider's owner verification (terminal only). |
 | `npm run licences:demo` | Demo licences for the three systems, for a sandbox like this one. |
-| `npm run test` | Guards: self-contained, no machine paths, compose and routing agree. |
+| `npm run seed:visitor` | The public sandbox login: its identity-provider account, and its role in every application. |
+| `npm run roles:backfill` | One time, when an application starts being managed from the console: gives the people who already have an account in it the role they hold there, so nobody is locked out. `-- --dry-run` shows what it would write. |
+| `npm run test` | Guards: self-contained, no machine paths, compose and routing agree, every app lists its roles. |
+
+## Who may use which application
+
+The identity provider's console decides, for every application that signs in through it (Retail OS, Library, Martronics, JobPilot, MOS), who may sign in and as what. Open a person in the console (Users), choose their role for each application under **Application roles**, and save. **No access** means the application refuses their sign-in and it does not appear on their launcher. The roles on offer for an application are edited on its page under **Applications** (Roles that can be given). Document Management and Guest Management keep their own role screens on the same page.
+
+- The roles come from `platform.json` (`roles` of each app, `externalClients.mos` for MOS) and are seeded when the identity provider starts; roles added or renamed in the console afterwards are never overwritten.
+- The application receives the person's roles in the `app_roles` claim at every sign-in. It creates the account the first time (for single sign-on only, no password) and sets the role to the console's every time; a change made in the console signs the person out of that application so it applies at once. Someone switched off inside an application stays switched off.
+- MOS never takes the administrator role from the identity provider: that role is granted inside MOS, and the console's `admin` role for MOS only lets the person in.
+- Adding an application, or turning this on for one that already has people: list its roles in `platform.json`, run `npm run roles:backfill` **before** `npm run up` (it writes the catalog and the grants while the old provider ignores them), then `npm run up`. Once an application has roles, only people who hold one can sign in to it.
 
 ## Where things are
 

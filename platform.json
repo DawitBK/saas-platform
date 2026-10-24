@@ -17,6 +17,13 @@
       "db": "retail_os",
       "label": "Retail OS",
       "tile": "Retail OS: till, stock and books",
+      "grantsFrom": "select email, role from users where deleted_at is null and active and not platform_admin",
+      "roles": [
+        { "name": "owner", "label": "Owner" },
+        { "name": "manager", "label": "Manager" },
+        { "name": "accountant", "label": "Accountant" },
+        { "name": "cashier", "label": "Cashier" }
+      ],
       "twoRoles": false,
       "bootstrap": { "script": "owner:bootstrap", "email": "OWNER_EMAIL", "password": "OWNER_PASSWORD" },
       "extraEnv": { "BUSINESS_TIMEZONE": "Africa/Addis_Ababa" },
@@ -36,6 +43,11 @@
       "db": "library",
       "label": "Library",
       "tile": "Library: catalogue and circulation desk",
+      "grantsFrom": "select email, role from users where deleted_at is null and active and not platform_admin",
+      "roles": [
+        { "name": "admin", "label": "Administrator" },
+        { "name": "librarian", "label": "Librarian" }
+      ],
       "twoRoles": false,
       "bootstrap": { "script": "admin:bootstrap", "email": "ADMIN_EMAIL", "password": "ADMIN_PASSWORD" },
       "extraEnv": {},
@@ -54,6 +66,12 @@
       "db": "martronics",
       "label": "Martronics",
       "tile": "Martronics: online shop and admin",
+      "grantsFrom": "select email, role from users where deleted_at is null and not platform_admin",
+      "roles": [
+        { "name": "admin", "label": "Administrator" },
+        { "name": "manager", "label": "Manager" },
+        { "name": "customer", "label": "Customer" }
+      ],
       "twoRoles": false,
       "bootstrap": { "script": "admin:bootstrap", "email": "ADMIN_EMAIL", "password": "ADMIN_PASSWORD" },
       "extraEnv": {},
@@ -73,6 +91,10 @@
       "db": "jobpilot",
       "label": "JobPilot",
       "tile": "JobPilot: job search workspace",
+      "grantsFrom": "select email, 'member' from users where status = 'ACTIVE' and not platform_admin",
+      "roles": [
+        { "name": "member", "label": "Member (own workspace)" }
+      ],
       "twoRoles": true,
       "bootstrap": null,
       "extraEnv": {},
@@ -81,6 +103,30 @@
         ["jobseeker.ana", "Ana", "Candidate"],
         ["jobseeker.ben", "Ben", "Candidate"],
         ["recruiter.rita", "Rita", "Recruiter"]
+      ]
+    }
+  },
+  "externalClients": {
+    "_note": "Applications that sign in through the identity provider but are not built here (MOS runs from its own repository). Only the roles the console offers for them are listed; they are registered when MOS_ORIGIN is set in .env. MOS never takes the administrator role from the identity provider: it is granted inside MOS, and the role listed here only lets the person in.",
+    "mos": {
+      "roles": [
+        { "name": "admin", "label": "Administrator (access; the role itself is granted inside MOS)" },
+        { "name": "guard", "label": "Gate guard" },
+        { "name": "verifier", "label": "Weighbridge verifier" },
+        { "name": "gatesup", "label": "Gate supervisor" },
+        { "name": "analyst", "label": "Lab analyst" },
+        { "name": "labmanager", "label": "Lab manager" },
+        { "name": "storekeeper", "label": "Storekeeper" },
+        { "name": "buyer", "label": "Buyer" },
+        { "name": "procurement", "label": "Procurement manager" },
+        { "name": "production", "label": "Production supervisor" },
+        { "name": "salesrep", "label": "Sales representative" },
+        { "name": "salesmanager", "label": "Sales manager" },
+        { "name": "cashier", "label": "Cashier" },
+        { "name": "apclerk", "label": "Accounts payable clerk" },
+        { "name": "deptmanager", "label": "Department manager" },
+        { "name": "finance", "label": "Finance manager" },
+        { "name": "gm", "label": "General manager" }
       ]
     }
   }

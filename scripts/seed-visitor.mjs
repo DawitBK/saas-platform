@@ -28,7 +28,15 @@ const run = (service, script, extra = []) => {
   if (r.status !== 0) failed += 1;
 };
 
-run('sso', 'seed-visitor-sso.mjs');
+// The role the public login holds in each application the identity provider manages: the owner role of each app (JobPilot has one role, member),
+// and the administrator access role in MOS when it is registered. The apps create the account at the first sign-in.
+const grants = Object.fromEntries(
+  Object.entries(platform.apps)
+    .filter(([, app]) => app.roles?.length)
+    .map(([key, app]) => [key, [app.owner ?? app.roles[0].name]]),
+);
+if (s.MOS_ORIGIN && platform.externalClients?.mos) grants.mos = ['admin'];
+run('sso', 'seed-visitor-sso.mjs', ['-e', `APP_GRANTS=${JSON.stringify(grants)}`]);
 for (const [key, app] of Object.entries(platform.apps)) {
   const role = app.owner;
   run(app.service, 'seed-visitor-app.mjs', ['-e', `APP_KEY=${key}`, ...(role ? ['-e', `APP_ROLE=${role}`] : [])]);

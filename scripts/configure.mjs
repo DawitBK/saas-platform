@@ -73,6 +73,13 @@ const licenceValues = trust ? { LICENSE_TRUST_PUBLIC_KEYS: trust } : {};
 // The product apps registered with the identity provider: client id and secret per app, carried over from the previous setup.
 const productFile = path.join(STATE, 'apps-sso.json');
 const productSso = fs.existsSync(productFile) ? JSON.parse(fs.readFileSync(productFile, 'utf8')) : null;
+// The roles the identity provider's console offers for each application it manages (platform.json): the four apps, and MOS when it is registered.
+// Seeded into the provider's role catalog at its start; roles added or renamed in the console afterwards are never overwritten.
+const rolesOf = (roles) => roles.map((r, i) => ({ name: r.name, display_name: r.label, sort_order: (i + 1) * 10 }));
+const clientRoles = {
+  ...Object.fromEntries(Object.entries(platform.apps).filter(([, app]) => app.roles?.length).map(([key, app]) => [key, rolesOf(app.roles)])),
+  ...(mosOrigin && platform.externalClients?.mos?.roles?.length ? { mos: rolesOf(platform.externalClients.mos.roles) } : {}),
+};
 
 // ---------------------------------------------------------------------------------------------- writing
 const PLACEHOLDER = /replace[-_]with|must-match|your_password|change-me|change-this|^replace/i;
@@ -174,6 +181,7 @@ build(
     ...licenceValues,
     ...(signingKey ? { LICENSE_SIGNING_KEY_FILE: `/state/licence/${signingKey}` } : {}),
     ...(productClients ? { PRODUCT_CLIENTS_JSON: JSON.stringify(productClients), PRODUCT_APPS_JSON: JSON.stringify(productSso.tiles) } : {}),
+    ...(Object.keys(clientRoles).length > 0 ? { CLIENT_ROLES_JSON: JSON.stringify(clientRoles) } : {}),
     ...(mosOrigin
       ? {
           MOS_ENABLED: 'true',

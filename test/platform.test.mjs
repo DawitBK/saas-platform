@@ -110,3 +110,28 @@ test('a location that sets its own proxy headers repeats the common ones (nginx 
   }
   assert.deepEqual(bad, []);
 });
+
+test('every app lists the roles the identity provider offers for it, and how to read its existing accounts', () => {
+  const roleName = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+  for (const [key, app] of Object.entries(platform.apps)) {
+    assert.ok(Array.isArray(app.roles) && app.roles.length > 0, `${key} has no roles`);
+    const names = app.roles.map((r) => r.name);
+    assert.equal(new Set(names).size, names.length, `${key} lists a role twice`);
+    for (const r of app.roles) {
+      assert.match(r.name, roleName, `${key}: "${r.name}" is not a valid role name`);
+      assert.ok(typeof r.label === 'string' && r.label.trim() !== '' && r.label.length <= 80, `${key}/${r.name} needs a label of 1 to 80 characters`);
+    }
+    if (app.owner) assert.ok(names.includes(app.owner), `${key}: the owner role "${app.owner}" is not in its roles`);
+    assert.match(app.grantsFrom ?? '', /^select email, /i, `${key} needs a grantsFrom query that selects email and role`);
+  }
+});
+
+test('MOS roles are valid and its administrator role only lets a person in (MOS grants the real one itself)', () => {
+  const mos = platform.externalClients?.mos;
+  assert.ok(mos?.roles?.length > 0);
+  const names = mos.roles.map((r) => r.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(names.includes('admin'));
+  const admin = mos.roles.find((r) => r.name === 'admin');
+  assert.match(admin.label, /granted inside MOS/i, 'the administrator role must say that it only gives access');
+});
