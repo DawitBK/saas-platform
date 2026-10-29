@@ -28,6 +28,7 @@
     "licences:demo": "node scripts/tools.mjs licences-demo",
     "test": "node --test \"test/**/*.test.mjs\"",
     "seed:visitor": "node scripts/seed-visitor.mjs",
+    "seed:retail": "node scripts/seed-retail.mjs",
     "roles:backfill": "node scripts/backfill-app-roles.mjs",
     "deploy:vercel": "node scripts/deploy-vercel.mjs",
     "pm2:start": "node scripts/pm2.mjs start",

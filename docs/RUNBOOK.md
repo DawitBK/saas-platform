@@ -13,6 +13,7 @@ Everyday operation, what to do when something breaks, and what lives only on thi
 | Update after a `git pull` in a system or app | `npm run up` (rebuilds what changed, migrates, restarts) |
 | Stop everything | `npm run down` (data is kept in Docker volumes) |
 | Put the public demo login back to a known state | `npm run seed:visitor` |
+| Fill Retail OS with six months of connected demo trading | `npm run seed:retail` (repeatable; see "Retail OS demo data" below) |
 | Take a full backup | `npm run backup`, then copy `.state/backups/<stamp>` off this machine |
 | Check the machine and the checkout | `npm run doctor` |
 
@@ -78,3 +79,12 @@ The identity provider asks for the owner's proof before key, licence, platform-s
 - No service keeps a secret in a file inside a repository: secrets live in `.state/`, which is never committed.
 - The three systems' internal APIs answer only their listed callers, which have fixed addresses on the platform network.
 - Migrations run as a one-shot job before a service starts; a failed migration stops the service from starting.
+
+## Retail OS demo data
+
+`npm run seed:retail` runs the app's own `seed:demo` command in a one-off container (`--no-deps`, production guard acknowledged with `--allow-production` because this database holds demo data on purpose). It replays 180 days of trading through the same services the API uses, so stock, books and reports agree, and it checks its own result before it says it is finished. Details: `apps/retail-os/docs/demo-data.md`.
+
+- Safe to repeat: a finished seed changes nothing; an interrupted one resumes from the database.
+- It never deletes or edits existing records. It needs an owner, manager, accountant and cashier to exist in Retail OS (the sandbox people are copied there when the database is rebuilt).
+- It needs a database where the history can start before any other entry. On a database that already holds an older, thinner demo (the sandbox did, from the earlier seed), seeding on top would put six months of trading before an opening balance dated later. Start such a database afresh instead, keeping the old one: back up (`npm run backup`), stop `retail`, rename `retail_os` to a dated name in `psql -U postgres` (`alter database retail_os rename to ...`), create a new `retail_os` owned by role `retail_os`, start `retail` (its migration job builds the tables), copy the people over (`pg_dump --data-only -t users` from the old database), then run `npm run seed:retail`. Going back is the rename the other way.
+- After a restore of the Retail OS database, run `npm run seed:visitor` as well so the public login exists.

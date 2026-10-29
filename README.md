@@ -48,6 +48,7 @@ There are two ways to start it and they work together. By hand, `npm run up`. Or
 | `npm run owner:enroll` / `owner:status` / `owner:recover` | The identity provider's owner verification (terminal only). |
 | `npm run licences:demo` | Demo licences for the three systems, for a sandbox like this one. |
 | `npm run seed:visitor` | The public sandbox login: its identity-provider account, and its role in every application. |
+| `npm run seed:retail` | Six months of connected demo trading in Retail OS, replayed through its own services. Repeatable; resumes if interrupted. |
 | `npm run roles:backfill` | One time, when an application starts being managed from the console: gives the people who already have an account in it the role they hold there, so nobody is locked out. `-- --dry-run` shows what it would write. |
 | `npm run test` | Guards: self-contained, no machine paths, compose and routing agree, every app lists its roles. |
 
