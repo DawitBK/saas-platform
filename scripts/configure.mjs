@@ -346,6 +346,8 @@ for (const [key, app] of apps) {
     OIDC_INTERNAL_URL: sso,
     OIDC_CLIENT_ID: key,
     OIDC_CLIENT_SECRET: secret(`apps.${key}.oidc`, 32),
+    // JobPilot encrypts two-step sign-in secrets and organization credentials with this key (back .state up: losing it makes them unreadable).
+    ...(key === 'jobpilot' ? { SECRETS_KEY: secret('apps.jobpilot.secrets', 32), APP_URL: origin } : {}),
     ...app.extraEnv,
   };
   const file = path.join(ENV_DIR, `${key}.env`);
