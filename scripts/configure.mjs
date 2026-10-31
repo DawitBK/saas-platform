@@ -314,6 +314,7 @@ build(
     NEXT_PUBLIC_BASE_PATH: '/gms',
     NEXT_PUBLIC_API_BASE_URL: `${origin}/api/v1`,
     NEXT_PUBLIC_SOCKET_URL: origin,
+    NEXT_PUBLIC_SOCKET_TRANSPORTS: 'polling', // Vercel cannot pass a WebSocket upgrade
     NEXT_PUBLIC_APP_URL: `${origin}/gms`,
     NEXT_PUBLIC_SSO_LOGIN_URL: `${origin}/sso/bridge/gms/start`,
     NEXT_PUBLIC_ENABLE_LIVE_DEMO: 'true',
@@ -322,7 +323,7 @@ build(
 );
 build(
   tpl('dms-saas', 'frontend', '.env.development.example'),
-  { NEXT_PUBLIC_BASE_PATH: '/dms', NEXT_PUBLIC_API_BASE_URL: `${origin}/dms/api/v1`, NEXT_PUBLIC_SOCKET_URL: origin, NEXT_PUBLIC_DEV_LOGIN: 'false' },
+  { NEXT_PUBLIC_BASE_PATH: '/dms', NEXT_PUBLIC_API_BASE_URL: `${origin}/dms/api/v1`, NEXT_PUBLIC_SOCKET_URL: origin, NEXT_PUBLIC_SOCKET_TRANSPORTS: 'polling', NEXT_PUBLIC_DEV_LOGIN: 'false' },
   path.join(frontendDir, 'dms.env'),
 );
 

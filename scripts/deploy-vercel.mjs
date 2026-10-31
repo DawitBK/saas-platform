@@ -121,8 +121,11 @@ function portal() {
       // The servers on this machine, through the tunnel (the specific paths first).
       { source: '/gms/__sso', destination: `${backend}/gms/__sso` },
       { source: '/dms/api/v1/:path*', destination: `${backend}/dms/api/v1/:path*` },
+      // The socket.io browser client always asks for "<path>/" (with the slash), which a bare :path* pattern does not match.
+      { source: '/dms/socket.io/', destination: `${backend}/dms/socket.io/` },
       { source: '/dms/socket.io/:path*', destination: `${backend}/dms/socket.io/:path*` },
       { source: '/api/:path*', destination: `${backend}/api/:path*` },
+      { source: '/socket.io/', destination: `${backend}/socket.io/` },
       { source: '/socket.io/:path*', destination: `${backend}/socket.io/:path*` },
       // The web parts, each already built for its own base path.
       { source: '/sso/:path*', destination: `${frontendOrigins.sso}/sso/:path*` },
