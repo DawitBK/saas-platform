@@ -3,7 +3,8 @@
  * The one way to drive pm2 for this platform. pm2 is a dependency of this repository (npm install), and its own files live in
  * .state/pm2, so nothing is installed globally and a second copy of the platform (SAAS_STATE_DIR) gets its own pm2.
  *
- *   npm run pm2:start     start the stack job and the watchdog (safe to repeat)
+ *   npm run pm2:start     start the stack job, the container watchdog and the network watch (safe to repeat)
+ *   npm run pm2:watch     start only the two watchers (nothing is rebuilt or restarted)
  *   npm run pm2:stop      stop watching (the containers keep running); `npm run down` stops the platform itself
  *   npm run pm2:status    pm2's list plus what the watchdog last saw and did
  *   npm run pm2:logs      follow the watchdog and stack logs
@@ -48,13 +49,15 @@ function boot(action) {
 switch (command) {
   case 'start': {
     fs.mkdirSync(path.join(STATE, 'logs'), { recursive: true });
-    const r = pm2(['startOrRestart', path.join(ROOT, 'ecosystem.config.cjs'), '--update-env']);
+    // --watchers: only the two watchers (containers, network), without the stack job that rebuilds and restarts the platform.
+    const only = process.argv.includes('--watchers') ? ['--only', 'saas-watchdog,saas-netwatch'] : [];
+    const r = pm2(['startOrRestart', path.join(ROOT, 'ecosystem.config.cjs'), '--update-env', ...only]);
     if (r.status !== 0) process.exit(r.status ?? 1);
     console.log('\nStarted. Check it with: npm run pm2:status');
     break;
   }
   case 'stop':
-    pm2(['delete', 'saas-watchdog', 'saas-stack'], 'pipe');
+    pm2(['delete', 'saas-watchdog', 'saas-stack', 'saas-netwatch'], 'pipe');
     pm2(['kill'], 'pipe');
     console.log('pm2 stopped. The containers are still running (npm run down stops them).');
     break;

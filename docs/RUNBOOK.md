@@ -31,6 +31,24 @@ The platform restarts by itself after a crash or a reboot (every long-running se
 | You sign in to Windows after a restart | If `npm run pm2:boot` was run once, a scheduled task (SaaS-Platform-PM2) starts the platform and the watchdog 90 seconds later. |
 | The machine sleeps or loses its connection | Nothing is wrong with the platform, but visitors cannot reach it: see the next section. |
 
+## The sign-in portal works on one network and not on another
+
+Nothing is wrong with the platform when this happens: it answers in milliseconds on this machine. What changes is the road from the internet to the laptop. The public address is a Tailscale Funnel; on a pocket 4G router (no IPv6, a strict NAT) Tailscale cannot make a direct path and relays through Europe (about 140 ms away, with stalls of 10 to 20 seconds). A phone hotspot is less strict, so it works there.
+
+**Network watch** (runs with `npm run pm2:start`, or alone with `npm run pm2:watch`) asks every 10 seconds: the platform here, the public tunnel (through Tailscale's real addresses), the Vercel portal, and the sign-in discovery document. It also records the Wi-Fi name, signal, address and Tailscale's own health once a minute.
+
+| What | Command or place |
+| --- | --- |
+| Outages and availability, per Wi-Fi network | `npm run netwatch:report` (last 24 h) or `npm run netwatch:report -- 3` (last 3 h) |
+| Right now | `.state/netwatch.json` (and `npm run pm2:logs`) |
+| Every round, kept 14 days | `.state/logs/netwatch-YYYY-MM-DD.jsonl` (`kind: probe`, `net`, `heal`) |
+
+**What heals by itself.** When the platform answers here but the tunnel does not for three rounds (30 seconds), the watch nudges Tailscale: first new sockets and a fresh look at the network (`tailscale debug rebind`, `restun`), and only if that did not help, a full `tailscale down` and `up`. Never more than once in 3 minutes, and not when the cause is public DNS. Turn it off with `NETWATCH_HEAL=off` in `.env`. Each nudge is a `heal` line in the log, so the report can be compared with what was done.
+
+**What the edge keeps.** Vercel keeps a copy of the sign-in discovery document and the signing keys (`/sso/.well-known/*`, `/sso/jwks`): fresh 5 minutes, then served stale for a day while it re-checks, and stale if the tunnel is down. MOS, DMS, GMS and the apps read those two documents; a stall no longer stops them. Logging in itself (the password step) still needs the tunnel.
+
+**What only a different road fixes.** A stable public address needs a path that does not depend on this laptop's NAT: a Cloudflare Tunnel (needs a Cloudflare account and a domain), or hosting the platform on a server. Until then, use the phone hotspot (or USB tethering) as the laptop's uplink when it matters, or turn IPv6 on in the router if it has the setting.
+
 ## The visitor sees "demo server is resting"
 
 The portfolio asks a small status function on Vercel whether the platform answers. It says "offline" when the machine is off, asleep or has lost its connection, or when the tunnel is down. Check, in this order:

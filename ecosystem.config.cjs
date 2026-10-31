@@ -4,6 +4,8 @@
 //  - saas-stack     runs `npm run up` once (configure, build, migrate, start, wait until healthy), then ends. It shows as
 //                   "stopped" in pm2 afterwards; that is normal, it is a job and not a service.
 //  - saas-watchdog  runs for good: fixes a container that is frozen, paused, stopped by mistake or missing (scripts/watchdog.mjs).
+//  - saas-netwatch  runs for good: times every hop between the public internet and this machine, and which Wi-Fi it is on
+//                   (scripts/netwatch.mjs; `npm run netwatch:report` reads it). It only observes.
 //
 // The applications themselves still run in Docker. pm2 starts and watches the stack; it does not replace Docker.
 const path = require('node:path');
@@ -39,6 +41,16 @@ module.exports = {
       max_restarts: 100,
       out_file: path.join(logs, 'watchdog.log'),
       error_file: path.join(logs, 'watchdog.log'),
+    },
+    {
+      ...common,
+      name: 'saas-netwatch',
+      script: 'scripts/netwatch.mjs',
+      autorestart: true,
+      restart_delay: 5000,
+      max_restarts: 1000,
+      out_file: path.join(logs, 'netwatch.out.log'),
+      error_file: path.join(logs, 'netwatch.out.log'),
     },
   ],
 };

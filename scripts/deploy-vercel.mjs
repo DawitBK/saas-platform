@@ -129,7 +129,16 @@ function portal() {
       { source: '/dms/:path*', destination: `${frontendOrigins.dms}/dms/:path*` },
       { source: '/gms/:path*', destination: `${frontendOrigins.gms}/gms/:path*` },
     ],
-    headers: [{ source: '/(.*)', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }, { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' }] }],
+    headers: [
+      { source: '/(.*)', headers: [{ key: 'X-Content-Type-Options', value: 'nosniff' }, { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' }] },
+      // What every other system reads to find the identity provider and its signing keys. They change rarely, so Vercel keeps a copy:
+      // fresh for 5 minutes, then served stale (while it re-checks) for a day, and stale if the tunnel is down. A stall on the laptop's
+      // network then does not stop MOS, DMS, GMS and the apps from signing people in.
+      ...['/sso/.well-known/:file*', '/sso/jwks'].map((source) => ({
+        source,
+        headers: [{ key: 'Cache-Control', value: 'public, s-maxage=300, stale-while-revalidate=86400, stale-if-error=86400' }],
+      })),
+    ],
   };
   const dir = path.join(STATE, 'vercel-portal');
   fs.mkdirSync(path.join(dir, 'public'), { recursive: true });
