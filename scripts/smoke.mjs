@@ -102,8 +102,9 @@ if (local) {
     record(portal.includes('Welcome,') && !BAD_TEXT.test(portal), 'sign in at the portal', email);
     for (const tile of tiles) {
       await page.goto(`${origin}/sso/portal`, { waitUntil: 'load' });
-      await page.waitForTimeout(1200);
       const link = page.getByText(tile.name, { exact: false }).first();
+      // The launcher fills in after a call over the tunnel, which can be slow: wait for the tile instead of guessing how long.
+      await link.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
       if (!(await link.count())) {
         record(false, tile.name, 'no such tile on the launcher');
         continue;
