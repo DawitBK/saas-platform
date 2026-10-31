@@ -84,7 +84,7 @@ if (local) {
   const tiles = [
     { name: 'Document Management', host: new URL(origin).host, path: /^\/dms\/dashboard/, text: /Enterprise DMS/ },
     { name: 'Guest Management', host: new URL(origin).host, path: /^\/gms\/admin/, text: /Admin Control/ },
-    { name: 'Retail OS', host: web['retail-os'] && new URL(web['retail-os']).host, path: /^\/(?!login)/, text: /Retail OS/ },
+    { name: 'Retail OS', host: web['retail-os'] && new URL(web['retail-os']).host, path: /^\/(?!login)/, text: /Retail OS/, drawn: 'Daily sales for the last 30 days' },
     { name: 'JobPilot', host: web.jobpilot && new URL(web.jobpilot).host, path: /^\/(?!login)/, text: /JobPilot/ },
     { name: 'Martronics', host: web.martronics && new URL(web.martronics).host, path: /^\/(?!login)/, text: /Sign out/ },
     { name: 'Library', host: web.library && new URL(web.library).host, path: /^\/(?!login)/, text: /Library/ },
@@ -117,6 +117,14 @@ if (local) {
       const hostOk = !tile.host || url.host === tile.host;
       const ok = hostOk && !stuck && tile.path.test(url.pathname) && tile.text.test(body) && !BAD_TEXT.test(body);
       record(ok, tile.name, `${url.host}${url.pathname}${url.search ? ' (' + url.search.slice(0, 40) + ')' : ''} | ${body.slice(0, 70)}`);
+      if (tile.drawn && ok) {
+        // A chart is judged by what it draws: a box that exists but has no bars passes every text check (the Retail OS dashboard once did).
+        const marks = await page.evaluate((label) => {
+          const el = [...document.querySelectorAll('[role=img]')].find((e) => e.getAttribute('aria-label') === label);
+          return el ? [...el.querySelectorAll('rect, path, circle')].filter((m) => { const b = m.getBoundingClientRect(); return b.width > 0 && b.height > 0; }).length : -1;
+        }, tile.drawn);
+        record(marks > 0, `${tile.name}: "${tile.drawn}" is drawn`, marks < 0 ? 'chart not found' : `${marks} marks`);
+      }
     }
   } finally {
     await browser.close();
