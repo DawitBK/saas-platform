@@ -133,7 +133,10 @@ const apps = Object.entries(platform.apps);
 const productClients = productSso
   ? productSso.clients.map((c) => {
       const app = platform.apps[c.client_id];
-      return app ? { ...c, backchannel_logout_uri: `http://${app.service}:${app.port}/api/v1/auth/backchannel-logout` } : c;
+      // Where the provider tells the app a person was signed out, and where it checks the app answers (the console's System page).
+      return app
+        ? { ...c, backchannel_logout_uri: `http://${app.service}:${app.port}/api/v1/auth/backchannel-logout`, health_uri: `http://${app.service}:${app.port}/health/ready` }
+        : c;
     })
   : null;
 
@@ -190,6 +193,7 @@ build(
           MOS_LOGOUT_URIS: `${mosOrigin}/odoo`,
           MOS_PORTAL_URL: `${mosOrigin}/mos/oidc/login`,
           MOS_BACKCHANNEL_LOGOUT_URI: `${mosInternal}/mos/oidc/backchannel-logout`,
+          MOS_HEALTH_URL: `${mosInternal}/web/health`,
         }
       : {}),
   },
