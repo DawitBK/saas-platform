@@ -72,14 +72,15 @@ test('docker compose ps output is read as one object per line or as an array', (
   assert.deepEqual(parsePs(''), []);
 });
 
-test('the pm2 process list names the job and the watchdog and points at scripts that exist', () => {
+test('the pm2 process list names the job, the watchdog and the network watch and points at scripts that exist', () => {
   const eco = createRequire(import.meta.url)(path.join(ROOT, 'ecosystem.config.cjs'));
   const byName = Object.fromEntries(eco.apps.map((a) => [a.name, a]));
-  assert.deepEqual(Object.keys(byName).sort(), ['saas-stack', 'saas-watchdog']);
+  assert.deepEqual(Object.keys(byName).sort(), ['saas-netwatch', 'saas-stack', 'saas-watchdog']);
   for (const app of eco.apps) assert.ok(fs.existsSync(path.join(ROOT, app.script)), `${app.script} exists`);
   assert.equal(byName['saas-stack'].autorestart, false, 'the start job runs once');
   assert.match(byName['saas-stack'].args, /--wait-docker/, 'at sign-in it must wait for Docker Desktop');
   assert.equal(byName['saas-watchdog'].autorestart, true);
+  assert.equal(byName['saas-netwatch'].autorestart, true, 'the network watch must come back if it dies');
   for (const app of eco.apps) assert.equal(app.windowsHide, true);
 });
 
